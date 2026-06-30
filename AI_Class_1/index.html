@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AURA - Real-Time Interactive Face Filters</title>
+  
+  <!-- Google Fonts for futuristic look -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Outfit:wght@300;400;600;700&display=swap" rel="stylesheet">
+  
+  <!-- Stylesheet -->
+  <link rel="stylesheet" href="style.css">
+  
+  <!-- MediaPipe Face Mesh dependencies from CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh.js" crossorigin="anonymous"></script>
+</head>
+<body>
+  <!-- App Shell -->
+  <div class="app-container">
+    
+    <!-- Background Animated Grid -->
+    <div class="grid-bg"></div>
+    
+    <!-- Header -->
+    <header class="app-header">
+      <div class="logo">
+        <span class="pulse-dot"></span>
+        <h1>AURA</h1>
+        <span class="logo-sub">CV ENGINE</span>
+      </div>
+      
+      <!-- Current Filter Banner -->
+      <div class="active-filter-display">
+        <div class="filter-subtitle">CURRENT EFFECT</div>
+        <div id="filter-name" class="filter-title">COMIC BOOK HERO</div>
+      </div>
+      
+      <!-- Performance Metrics -->
+      <div class="diagnostics-panel">
+        <div class="metric">
+          <span class="metric-label">FPS</span>
+          <span id="fps-val" class="metric-val">--</span>
+        </div>
+        <div class="metric">
+          <span class="metric-label">TRACKING</span>
+          <span id="tracking-val" class="metric-val status-checking">CONNECTING</span>
+        </div>
+      </div>
+    </header>
+
+    <!-- Main Workspace -->
+    <main class="workspace">
+      <!-- Media Box (where canvases and video reside) -->
+      <div class="viewport-card">
+        <!-- Aspect-ratio container for WebGL & Canvas overlays -->
+        <div class="canvas-viewport" id="viewport">
+          
+          <!-- Hidden source video stream -->
+          <video id="webcam" autoplay playsinline muted></video>
+          
+          <!-- WebGL rendering canvas (Background & Distortions) -->
+          <canvas id="gl-canvas"></canvas>
+          
+          <!-- 2D Canvas rendering overlays (Ears, Masks, Particles, Text overlays) -->
+          <canvas id="overlay-canvas"></canvas>
+          
+          <!-- On-screen Flash Frame for capture snaps -->
+          <div id="camera-flash" class="camera-flash"></div>
+          
+          <!-- Capture Alert Toast -->
+          <div id="toast" class="toast-notification">Snapshot saved to downloads!</div>
+
+          <!-- Start Screen Overlay -->
+          <div id="start-screen" class="loading-overlay">
+            <div class="loader-content">
+              <div class="spinner-outer" style="animation: none; border-color: var(--accent-purple); box-shadow: 0 0 20px var(--accent-glow-purple); margin-bottom: 0.5rem;">
+                <div class="spinner-inner" style="animation: none; border-color: var(--accent-cyan); box-shadow: 0 0 20px var(--accent-glow-cyan);"></div>
+              </div>
+              <h2 style="margin-top: 1.5rem; letter-spacing: 4px; font-weight: 900;">AURA CV ENGINE</h2>
+              <p>Real-time face landmark tracking & WebGL visual effects.</p>
+              <button id="start-camera-btn" class="glow-btn" style="margin-top: 1.2rem; padding: 14px 34px;">START CAMERA</button>
+              <div style="margin-top: 1.5rem; font-size: 0.7rem; color: var(--text-muted); letter-spacing: 0.5px;">
+                Runs 100% locally in browser • Camera permission required
+              </div>
+            </div>
+          </div>
+
+          <!-- Splash Loading Screen -->
+          <div id="loading-screen" class="loading-overlay hidden">
+            <div class="loader-content">
+              <div class="spinner-outer">
+                <div class="spinner-inner"></div>
+              </div>
+              <h2>INITIALIZING AI PIPELINE</h2>
+              <p>Downloading face mesh weight models & establishing tracking stream...</p>
+              <div class="progress-bar-container">
+                <div id="loading-progress" class="progress-bar" style="width: 15%"></div>
+              </div>
+            </div>
+          </div>
+          
+          <!-- Fallback Permission Screen -->
+          <div id="permission-error" class="permission-overlay hidden">
+            <div class="error-content">
+              <div class="error-icon">⚠️</div>
+              <h2 id="error-title">WEBCAM ACCESS REQUIRED</h2>
+              <p id="error-desc">This interactive face filter app requires camera access to detect landmarks and apply overlays in real-time.</p>
+              <button id="retry-camera-btn" class="glow-btn">GRANT CAMERA ACCESS</button>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </main>
+
+    <!-- Interactive Navigation Control Bar -->
+    <footer class="app-controls">
+      <!-- On Screen Instructions -->
+      <div class="shortcuts-instructions">
+        <span>Use <span class="kbd">←</span> and <span class="kbd">→</span> arrow keys to cycle effects</span>
+        <span class="separator">•</span>
+        <span>Press <span class="kbd">Space</span> or <span class="kbd">S</span> to take snapshot</span>
+      </div>
+
+      <div class="control-row">
+        <!-- Left Selection Button -->
+        <button id="prev-btn" class="nav-btn" aria-label="Previous filter">
+          <svg viewBox="0 0 24 24" width="24" height="24"><path d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z" fill="currentColor"/></svg>
+        </button>
+
+        <!-- Main Action Buttons -->
+        <div class="action-buttons-group">
+          <!-- Screenshot Button -->
+          <button id="snap-btn" class="action-btn circle-btn tooltip" data-tooltip="Capture Photo">
+            <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path><circle cx="12" cy="13" r="4"></circle></svg>
+          </button>
+          
+          <!-- Sound Toggle Button -->
+          <button id="sound-btn" class="action-btn circle-btn tooltip" data-tooltip="Toggle Audio">
+            <!-- Sound On Icon -->
+            <svg id="sound-on-icon" viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path></svg>
+            <!-- Sound Off Icon (Hidden by default) -->
+            <svg id="sound-off-icon" viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="hidden"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><line x1="23" y1="9" x2="17" y2="15"></line><line x1="17" y1="9" x2="23" y2="15"></line></svg>
+          </button>
+        </div>
+
+        <!-- Right Selection Button -->
+        <button id="next-btn" class="nav-btn" aria-label="Next filter">
+          <svg viewBox="0 0 24 24" width="24" height="24"><path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z" fill="currentColor"/></svg>
+        </button>
+      </div>
+
+      <!-- Filter Selection Indicators / Pips -->
+      <div class="filter-pips" id="filter-pips-container">
+        <!-- Dynamically generated pips -->
+      </div>
+    </footer>
+    
+  </div>
+
+  <!-- Scripts -->
+  <script src="sound.js"></script>
+  <script src="webgl-helper.js"></script>
+  <script src="filters.js"></script>
+  <script src="main.js"></script>
+</body>
+</html>
